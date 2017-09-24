@@ -79,6 +79,33 @@ exports.create = function(options) {
     });
   }
 
+  function revoke(revokeId) {
+    assertValid(revokeId, 'string');
+    var creds = cache.get('auth')[revokeId];
+    if (!creds) {
+      throw Error("No credentials exist for the given ID: " + revokeId);
+    }
+    return getAcmeUrls().then(function(acmeUrls) {
+      return acme.revokeCertificate({
+        cert: creds.cert,
+        domainKeyPair: creds.key,
+        revokeCertUrl: acmeUrls.revokeCert,
+      }).then(function(res) {
+        delete contexts[revokeId];
+        delete cache.get('auth')[revokeId];
+        var domains = cache.get('domains');
+        domains = filterKeys(domains, function(authId, domain) {
+          if (authId === revokeId) {
+            delete domains[domain];
+            return true;
+          }
+        });
+        log('verbose', 'Revoked SSL certificate for: ' + domains.join(', '));
+        return res;
+      });
+    });
+  }
+
   function filterByAge(olderThan) {
     assertValid(olderThan, 'number|date');
     var now = Date.now();
@@ -127,30 +154,21 @@ exports.create = function(options) {
         renew(authId, options);
       }
     },
-    revoke: function(revokeId) {
-      assertValid(revokeId, 'string');
-      var creds = cache.get('auth')[revokeId];
-      if (!creds) {
-        throw Error("No credentials exist for the given ID: " + revokeId);
+    revoke: function(filter) {
+      return Promise.all(
+        this.filterCredentials(filter).map(function(authId) {
+          return revoke(authId);
+        })
+      );
+    },
+    revokeAll: function() {
+      var promises = [];
+      var auth = cache.get('auth');
+      for (var authId in auth) {
+        // TODO: Check if the certificate has expired.
+        promises.push(revoke(authId));
       }
-      return getAcmeUrls().then(function(acmeUrls) {
-        return acme.revokeCertificate({
-          cert: creds.cert,
-          publicKeyPem: creds.key,
-          revokeCertUrl: acmeUrls.revokeCert,
-        }).then(function(res) {
-          delete cache.get('auth')[revokeId];
-          var domains = cache.get('domains');
-          domains = filterKeys(domains, function(authId, domain) {
-            if (authId === revokeId) {
-              delete domains[domain];
-              return true;
-            }
-          });
-          log('verbose', 'Revoked SSL certificate for: ' + domains.join(', '));
-          return res;
-        });
-      });
+      return Promise.all(promises);
     },
     getChallenge: function(url) {
       assertValid(url, 'string');
