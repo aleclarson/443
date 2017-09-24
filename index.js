@@ -5,7 +5,7 @@ var RSA = require('rsa-utils');
 var tls = require('tls');
 
 var certify = require('./lib/certify');
-var cache = require('./lib/cache');
+var Cache = require('./lib/cache');
 
 var __DEV__ = process.env.NODE_ENV !== 'production';
 var DAY_MS = 24 * 60 * 60 * 1000;
@@ -43,8 +43,9 @@ exports.create = function(options) {
   }
 
   var contexts = {};
-  cache.configure({
+  var cache = Cache.create({
     path: options.cachePath,
+    log: log,
   });
 
   function renew(renewId, options) {
@@ -68,6 +69,7 @@ exports.create = function(options) {
 
     return getAcmeUrls().then(function(acmeUrls) {
       options.urls = acmeUrls;
+      options.cache = cache;
       options.domains = domains;
       options.challenges = acmeChallenges;
       return certify(options).then(function() {
@@ -82,6 +84,7 @@ exports.create = function(options) {
       assertValid(options, 'object');
       return getAcmeUrls().then(function(acmeUrls) {
         options.urls = acmeUrls;
+        options.cache = cache;
         options.challenges = acmeChallenges;
         return certify(options);
       });
