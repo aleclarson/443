@@ -68,11 +68,12 @@ exports.create = function(options) {
     }, options);
 
     return getAcmeUrls().then(function(acmeUrls) {
+      options.log = log;
       options.urls = acmeUrls;
       options.cache = cache;
       options.domains = domains;
       options.challenges = acmeChallenges;
-      return certify(options).then(function() {
+      return certify(acme, options).then(function() {
         delete cache.get('auth')[renewId];
         log('verbose', 'Renewed SSL certificate for: ' + domains.join(', '));
       });
@@ -83,10 +84,11 @@ exports.create = function(options) {
     certify: function(options) {
       assertValid(options, 'object');
       return getAcmeUrls().then(function(acmeUrls) {
+        options.log = log;
         options.urls = acmeUrls;
         options.cache = cache;
         options.challenges = acmeChallenges;
-        return certify(options);
+        return certify(acme, options);
       });
     },
     renew: renew,
