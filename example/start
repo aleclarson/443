@@ -1,0 +1,18 @@
+#!/usr/bin/env node --inspect
+
+var cachePath = require('path').join(__dirname, 'cache.json');
+
+// Reset the cache path by default.
+if (/^(1|true)?$/.test(process.env.RESET_CACHE || '')) {
+  try {
+    require('fs').unlinkSync(cachePath);
+  } catch(e) {}
+}
+
+// Start the servers.
+module.exports = require('./server').create({
+  cachePath: cachePath,
+});
+
+// Keep the process alive (for inspecting).
+setInterval(function() {}, Infinity);
