@@ -25,8 +25,7 @@ exports.create = function(options) {
 
   var log = options.log || defaultLog;
   var acme = ACME.create({
-    debug: options.debug,
-    log: log,
+    log: options.debug ? log : undefined,
   });
   var acmeUrls = null;
   var acmeChallenges = {};
