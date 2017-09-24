@@ -188,6 +188,13 @@ exports.create = function(options) {
     getDomains: function() {
       return Object.keys(cache.get('domains'));
     },
+    filterDomains: function(filter) {
+      assertValid(filter, 'function');
+      var auth = cache.get('auth');
+      return filterKeys(cache.get('domains'), function(authId, domain) {
+        return filter(domain, auth[authId]);
+      });
+    },
     getCredentials: function(domain) {
       assertValid(domain, 'string');
       var domains = cache.get('domains');
