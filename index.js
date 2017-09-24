@@ -73,6 +73,7 @@ exports.create = function(options) {
       options.domains = domains;
       options.challenges = acmeChallenges;
       return certify(acme, options).then(function() {
+        delete contexts[renewId];
         delete cache.get('auth')[renewId];
         log('verbose', 'Renewed SSL certificate for: ' + domains.join(', '));
       });
