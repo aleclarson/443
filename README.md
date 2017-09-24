@@ -3,9 +3,22 @@
 
 Automated SSL certificates using [Let's Encrypt](https://letsencrypt.org/how-it-works).
 
+Read [the setup guide](#setup-guide) for easy integration.
+
+### Features
+
+- Simple API
+- Easy setup w/ guide
+- Helpers for renewing and revoking
+- Certificate file cache built-in
+- Custom logging option
+
 ```js
 var ssl = require('443').create({
   cachePath: path.join(__dirname, 'ssl.json'),
+  log: function(level, message) {
+    console.log(message);
+  },
 });
 
 ssl.certify({
@@ -21,25 +34,27 @@ ssl.certify({
     city: 'Mountain View',
   },
   rsaKeySize: 2048,
-  log: function(level, message) {
-    console.log(message);
-  },
 });
 ```
 
-#### Features
+&nbsp;
 
-- Simple API
-- Easy setup w/ guide
-- Helpers for renewing and revoking
-- Certificate file cache built-in
-- Custom logging option
+## API
 
----
+First, you'll want to use the `create` function to get an instance.
 
-### API
+```js
+var ssl = require('443').create(options);
+```
 
-#### certify(options)
+Valid options are:
+- `cachePath: string` The path where the JSON file containing your certificates and keypairs will be stored
+- `debug: boolean?` When true, the ACME core will spit out more verbose logs
+- `log: function?` A custom logging function that is passed `(level, message)`
+
+When `log` is undefined, a default logging function is used if `process.env.NODE_ENV` doesn't equal `production`. Otherwise, nothing will be logged unless you provide a custom function.
+
+### certify(options)
 
 Request a new certificate from the Let's Encrypt ACME server. If an ACME account has not been registered, one will be created before requesting the certificate. Later calls to `certify` will use the same account, even if the server restarts.
 
@@ -60,21 +75,22 @@ Defining `options.subject` is not required, because LE cannot verify any of that
 - `accountKeyPair: string?` Supply your own private key for account registration
 - `domainKeyPair: string?` Supply your own private key for certification
 - `rsaKeySize: number?` Customize the RSA key size (defaults to 2048)
-- `debug: boolean?` When true, `le-acme-core` spits out more detailed logs
-- `log: function?` Supply your own logging function. Arguments passed are `(level, message)`
 
-#### renew(authId, options)
+### renew(authId, options)
 
-Renew a cached certificate by its ID. Allows the same options as `certify`.
+Renew any certificates that match the given filter. Allows the same options as `certify`.
+
+For more info on the `filter` argument, see the `filterCredentials` method.
 
 Returns a promise.
 
 ```js
-// Renew certificates older than 60 days (what LE recommends).
 var DAY_MS = 24 * 60 * 60 * 1000;
-ssl.filterCredentials({
+
+// Renew certificates older than 60 days (what LE recommends).
+ssl.renew({
   olderThan: 60 * DAY_MS,
-}).forEach(ssl.renew);
+});
 ```
 
 ### renewAll(options)
@@ -83,21 +99,35 @@ Renew every cached certificate at once. Allows the same options as `certify`.
 
 Returns a promise.
 
-#### revoke(authId)
+### revoke(filter)
 
-Revoke a cached certificate by its ID.
+Revoke any certificates that match the given filter.
+
+For more info on the `filter` argument, see the `filterCredentials` method.
 
 Returns a promise.
 
-#### getChallenge(uri)
+### revokeAll()
+
+Revoke every cached certificate at once.
+
+Returns a promise.
+
+### getChallenge(uri)
 
 If the uri starts with `/.well-known/acme-challenge`, the appropriate ACME challenge is returned. You'll then want to call `res.end(challenge)` so LE knows you're the legitimate owner.
 
-#### getDomains()
+### getDomains()
 
 Returns an array of domains with valid certificates.
 
-#### getCredentials(domain)
+### filterDomains(filter)
+
+Returns an array of domains where the `filter` function returned true.
+
+The `filter` function is passed a domain string and its credentials object.
+
+### getCredentials(domain)
 
 Returns the object containing the domain's certificate. Also useful for checking if a domain has been validated by the ACME server.
 
@@ -109,13 +139,18 @@ The object contains the following properties:
 - `subject: object?` The subject used in the CSR
 - `expiresAt: number` When the certificate expires (eg: `Date.now()`)
 
-#### filterCredentials(filter)
+### filterCredentials(filter)
 
 Returns an array of certificate IDs that match the given filter.
 
-The `filter` argument can be a function (which is passed the same object that `getCredentials` returns), or an object with an `olderThan: date|number` property. When `olderThan` is a number, it's interpreted as age in milliseconds. When `olderThan` is a `Date`, it's interpreted as creation time.
+The `filter` argument can be:
+- a function (which is passed the same object that `getCredentials` returns)
+- an object with one of these values:
+  - `olderThan: number` Age greater than a number of milliseconds
+  - `olderThan: date` Created before a date
+  - `domains: array` Used by one of a set of domains
 
-#### getSecureContext(domain)
+### getSecureContext(domain)
 
 Returns a cached TLS context (creating one if necessary) for a given domain. If several domains are using the same certificate, they also use the same TLS context (assuming those domains are handled by the same server).
 
@@ -133,29 +168,19 @@ function getSecureContext(domain) {
 }
 ```
 
----
+&nbsp;
 
-### Setup guide
+## Setup guide
 
 This guide teaches you how to setup a NodeJS server that can renew its own SSL certificates.
 
-Before we get started, you can't run this locally without using [ngrok]() or [localtunnel]() with a custom subdomain.
-
-```sh
-# How to use ngrok:
-ngrok http 80 --subdomain=ssl27
-
-# How to use localtunnel:
-lt --port 80 --subdomain ssl27
-```
-
-Otherwise, if you have your own domain, you can use that instead! And when you want to get a real certificate, just set `process.env.NODE_ENV` to `production` and this library will use LE's production server instead of the staging server.
+Before we get started, you'll need your own domain to test on, because Let's Encrypt doesn't issue certificates for IP addresses.
 
 From here on out, I will be using "LE" to refer to Let's Encrypt.
 
 Let's do this!
 
-#### 1. Create a HTTP server on port 80. If you already have a HTTP server, great! Just make sure it's on port 80, because that's what LE uses.
+### 1. Create a HTTP server on port 80. If you already have a HTTP server, great! Just make sure it's on port 80, because that's what LE uses.
 
 ```js
 var http = require('http').createServer(function(req, res) {
@@ -176,7 +201,7 @@ http.listen(80, function() {
 
 Now, when you request an SSL certificate from LE, it will know you're legit.
 
-#### 2. Create a HTTPS server on port 443. If you already have a HTTPS server, great! Just make sure it's on port 443, because that's what LE uses.
+### 2. Create a HTTPS server on port 443. If you already have a HTTPS server, great! Just make sure it's on port 443, because that's what LE uses.
 
 ```js
 var https = require('https').createServer({
@@ -189,11 +214,13 @@ var https = require('https').createServer({
 });
 ```
 
-Now, every request and response to your server is encrypted!
+Now, every request and response to your server is encrypted (if the hostname has a valid certificate)!
 
-#### 3. With your server running, request an SSL certificate from LE.
+### 3. With your server running, request an SSL certificate from LE.
 
 This step will fetch a certificate (on server startup) for the domains that need one.
+
+Domains with valid certificates will load them from the JSON cache on startup.
 
 **NOTE:** Any domains you pass to `ssl.certify` must have a server that responds to challenges from LE.
 
@@ -220,7 +247,7 @@ if (insecureDomains.length) {
 }
 ```
 
-#### 4. Setup a timer for renewing your SSL certificate(s).
+### 4. Create a recurring timer for renewing your SSL certificate(s).
 
 LE certificates last for 90 days ([why?](https://letsencrypt.org/2015/11/09/why-90-days.html)).
 
@@ -234,12 +261,14 @@ var DAY_MS = 24 * 60 * 60 * 1000;
 setInterval(renewCerts, DAY_MS);
 
 function renewCerts() {
-  ssl.filterCredentials({
+  ssl.renew({
     olderThan: 60 * DAY_MS,
-  }).forEach(ssl.renew);
+  });
 }
 ```
 
 That's it! You now have automated SSL for your server!
+
+When you're ready to get a real certificate, set `process.env.NODE_ENV` to `production` and this library will use LE's production server instead of the staging server.
 
 If you have any questions, please open an issue.
