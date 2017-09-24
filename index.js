@@ -79,6 +79,35 @@ exports.create = function(options) {
     });
   }
 
+  function filterByAge(olderThan) {
+    assertValid(olderThan, 'number|date');
+    var now = Date.now();
+    if (typeof olderThan !== 'number') {
+      olderThan = now - olderThan;
+    }
+    console.log('Finding credentials older than ' + (olderThan / DAY_MS) + ' days...');
+    olderThan = now + (90 * DAY_MS) - olderThan;
+    return filterKeys(cache.get('auth'), function(creds) {
+      return new Date(creds.expiresAt) < olderThan;
+    });
+  }
+
+  function filterByDomain(filter) {
+    assertValid(filter, 'array');
+    var results = [];
+    var authIds = cache.get('domains');
+    filter.forEach(function(domain) {
+      var authId = authIds[domain];
+      if (!authId) {
+        throw Error("No certificate found for: " + domain);
+      }
+      if (results.indexOf(authId) < 0) {
+        results.push(authId);
+      }
+    });
+    return results;
+  }
+
   return {
     certify: function(options) {
       assertValid(options, 'object');
@@ -142,26 +171,21 @@ exports.create = function(options) {
       return null;
     },
     filterCredentials: function(filter) {
-      assertValid(filter, 'object|function');
       if (typeof filter === 'function') {
         return filterKeys(cache.get('auth'), filter);
       }
+      if (typeof filter === 'string') {
+        return filterByDomain([filter]);
+      }
+      if (filter.domains) {
+        return filterByDomain(filter.domains);
+      }
       if (filter.olderThan != null) {
-        var olderThan = filter.olderThan;
-        assertValid(olderThan, 'number|date');
-        var now = Date.now();
-        if (typeof olderThan !== 'number') {
-          olderThan = now - olderThan;
-        }
-        console.log('Finding credentials older than ' + (olderThan / DAY_MS) + ' days...');
-        olderThan = now + (90 * DAY_MS) - olderThan;
-        return filterKeys(cache.get('auth'), function(creds) {
-          return new Date(creds.expiresAt) < olderThan;
-        });
+        return filterByAge(filter.olderThan);
       }
       throw Error(
-        "`olderThan` is currently the only supported filter," +
-        " but you can also pass a filter function"
+        "`olderThan` and `domains` are currently the only supported filters," +
+        " but you can also pass a filter function or a domain string."
       );
     },
     getSecureContext: function(domain) {
