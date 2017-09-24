@@ -146,13 +146,21 @@ exports.create = function(options) {
         return certify(acme, options);
       });
     },
-    renew: renew,
+    renew: function(filter, options) {
+      return Promise.all(
+        this.filterCredentials(filter).map(function(authId) {
+          return renew(authId, options);
+        })
+      );
+    },
     renewAll: function(options) {
+      var promises = [];
       var auth = cache.get('auth');
       for (var authId in auth) {
         // TODO: Check if the certificate has expired.
-        renew(authId, options);
+        promises.push(renew(authId, options));
       }
+      return Promise.all(promises);
     },
     revoke: function(filter) {
       return Promise.all(
