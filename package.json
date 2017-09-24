@@ -1,6 +1,6 @@
 {
   "name": "443",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "dependencies": {
     "assertValid": "aleclarson/assertValid#1.0.0",
     "fsx": "aleclarson/fsx#1.3.1",
